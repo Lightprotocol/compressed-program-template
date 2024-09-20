@@ -1,0 +1,73 @@
+[template]
+cargo_generate_version = ">=0.18.2"
+ignore = [ "circuits/program_name/cargo-generate.toml", "programs_psp/program_name/cargo-generate.toml" ]
+
+
+[placeholders.rust-name]
+type = "string"
+prompt = "Name of the Rust crate (kebab-case)"
+
+[placeholders.rust-name-snake-case]
+type = "string"
+prompt = "Name of the Rust crate (snake_case)"
+
+[placeholders.rust-name-camel-case]
+type = "string"
+prompt = "Name of the Rust crate (UpperCamelCase)"
+
+[placeholders.program-id]
+type = "string"
+prompt = "Solana program ID"
+default = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+
+[placeholders.anchor-version]
+type = "string"
+prompt = "Anchor version"
+
+[placeholders.borsh-version]
+type = "string"
+prompt = "Borsh version"
+
+[placeholders.light-hasher-version]
+type = "string"
+prompt = "light hasher version"
+
+[placeholders.light-macros-version]
+type = "string"
+prompt = "light macros version"
+
+[placeholders.light-sdk-version]
+type = "string"
+prompt = "light sdk version"
+
+[placeholders.light-sdk-macros-version]
+type = "string"
+prompt = "light sdk macros version"
+
+[placeholders.light-utils-version]
+type = "string"
+prompt = "Light utils version"
+
+[placeholders.light-verifier-version]
+type = "string"
+prompt = "light verifier version"
+
+[placeholders.solana-sdk-version]
+type = "string"
+prompt = "solana sdk version"
+
+[placeholders.light-client-version]
+type = "string"
+prompt = "light client version"
+
+[placeholders.light-test-utils-version]
+type = "string"
+prompt = "light test utils version"
+
+[placeholders.solana-program-test-version]
+type = "string"
+prompt = "solana program test version"
+
+[placeholders.tokio-version]
+type = "string"
+prompt = "tokio version"
