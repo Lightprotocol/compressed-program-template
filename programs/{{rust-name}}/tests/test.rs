@@ -105,7 +105,6 @@ async fn test() {
         &payer,
         compressed_account,
         &address_merkle_context,
-        &account_compression_authority,
     )
     .await
     .unwrap();
