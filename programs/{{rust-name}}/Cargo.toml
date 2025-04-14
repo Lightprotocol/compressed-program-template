@@ -20,18 +20,17 @@ idl-build = ["anchor-lang/idl-build", "light-sdk/idl-build"]
 
 [dependencies]
 anchor-lang = "{{anchor-version}}"
-light-hasher = {version="{{light-hasher-version}}", features = ["solana"] }
+light-hasher = { version = "{{light-hasher-version}}", features = ["solana"] }
 light-macros = "{{light-macros-version}}"
 light-sdk = "{{light-sdk-version}}"
-light-sdk-macros = "{{light-sdk-macros-version}}" 
-light-utils = "{{light-utils-version}}"
 light-verifier = "{{light-verifier-version}}"
+light-compressed-account = "{{light-compressed-account-version}}"
 
 [target.'cfg(not(target_os = "solana"))'.dependencies]
 solana-sdk = "{{solana-sdk-version}}"
 
 [dev-dependencies]
-light-client ="{{light-client-version}}"
+light-client = "{{light-client-version}}"
 light-test-utils = "{{light-test-utils-version}}"
 solana-program-test = "{{solana-program-test-version}}"
 tokio = "{{tokio-version}}"

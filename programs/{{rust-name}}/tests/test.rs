@@ -5,15 +5,16 @@ use light_client::indexer::test_indexer::TestIndexer;
 use light_client::indexer::{AddressMerkleTreeAccounts, Indexer, StateMerkleTreeAccounts};
 use light_client::rpc::merkle_tree::MerkleTreeExt;
 use light_client::rpc::test_rpc::ProgramTestRpcConnection;
-use light_sdk::address::{derive_address, derive_address_seed};
-use light_sdk::compressed_account::CompressedAccountWithMerkleContext;
-use light_sdk::merkle_context::{
-    pack_address_merkle_context, pack_merkle_context, AddressMerkleContext, MerkleContext,
-    PackedAddressMerkleContext, PackedMerkleContext, RemainingAccounts,
+use light_sdk::{
+    address::v1::derive_address,
+    cpi::accounts::SystemAccountMetaConfig,
+    instruction::{
+        account_meta::CompressedAccountMeta,
+        instruction_data::LightInstructionData,
+        merkle_context::{pack_address_merkle_context, pack_merkle_context, AddressMerkleContext},
+        pack_accounts::PackedAccounts,
+    },
 };
-use light_sdk::utils::get_cpi_authority_pda;
-use light_sdk::verify::find_cpi_signer;
-use light_sdk::{PROGRAM_ID_ACCOUNT_COMPRESSION, PROGRAM_ID_LIGHT_SYSTEM, PROGRAM_ID_NOOP};
 use light_test_utils::test_env::{setup_test_programs_with_accounts_v2, EnvAccounts};
 use light_test_utils::{RpcConnection, RpcError};
 use {{rust-name-snake-case}}::CounterCompressedAccount;
@@ -46,40 +47,19 @@ async fn test() {
     )
     .await;
 
-    let mut remaining_accounts = RemainingAccounts::default();
-
-    let merkle_context = MerkleContext {
-        merkle_tree_pubkey: env.merkle_tree_pubkey,
-        nullifier_queue_pubkey: env.nullifier_queue_pubkey,
-        leaf_index: 0,
-        queue_index: None,
-    };
-    let merkle_context = pack_merkle_context(merkle_context, &mut remaining_accounts);
-
-    let address_merkle_context = AddressMerkleContext {
-        address_merkle_tree_pubkey: env.address_merkle_tree_pubkey,
-        address_queue_pubkey: env.address_merkle_tree_queue_pubkey,
-    };
-
-    let address_seed = derive_address_seed(
+    // Calculate address using the new derive_address function
+    let (address, _) = derive_address(
         &[b"counter", payer.pubkey().as_ref()],
+        &env.address_merkle_tree_pubkey,
         &{{rust-name-snake-case}}::ID,
-        &address_merkle_context,
     );
-    let address = derive_address(&address_seed, &address_merkle_context);
-
-    let address_merkle_context =
-        pack_address_merkle_context(address_merkle_context, &mut remaining_accounts);
 
     create_account(
         &mut rpc,
         &mut test_indexer,
         &env,
-        &mut remaining_accounts,
         &payer,
         &address,
-        &merkle_context,
-        &address_merkle_context,
     )
     .await
     .unwrap();
@@ -101,10 +81,8 @@ async fn test() {
     increment(
         &mut rpc,
         &mut test_indexer,
-        &mut remaining_accounts,
         &payer,
         compressed_account,
-        &address_merkle_context,
     )
     .await
     .unwrap();
@@ -127,10 +105,8 @@ async fn test() {
     delete_account(
         &mut rpc,
         &mut test_indexer,
-        &mut remaining_accounts,
         &payer,
         compressed_account,
-        &address_merkle_context,
     )
     .await
     .unwrap();
@@ -140,21 +116,21 @@ async fn create_account<R>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
     env: &EnvAccounts,
-    remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     address: &[u8; 32],
-    merkle_context: &PackedMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
 ) -> Result<(), RpcError>
 where
     R: RpcConnection + MerkleTreeExt,
 {
-    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
-    let registered_program_pda = Pubkey::find_program_address(
-        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
-        &PROGRAM_ID_ACCOUNT_COMPRESSION,
-    )
-    .0;
+    // Create packed accounts on each function call
+    let mut packed_accounts = PackedAccounts::default();
+    let merkle_tree_idx = packed_accounts.add_account(env.merkle_tree_pubkey, true);
+    packed_accounts.add_account(env.nullifier_queue_pubkey, true);
+    packed_accounts.add_account(env.cpi_context_account_pubkey, true);
+    let address_merkle_tree_idx = packed_accounts.add_account(env.address_merkle_tree_pubkey, true);
+    let address_queue_idx = packed_accounts.add_account(env.address_merkle_tree_queue_pubkey, true);
+    
+    let account_meta_config = SystemAccountMetaConfig::new();
     let rpc_result = test_indexer
         .create_proof_for_compressed_accounts(
             None,
@@ -165,35 +141,37 @@ where
         )
         .await;
 
-    let instruction_data = {{rust-name-snake-case}}::instruction::Create {
-        inputs: Vec::new(),
+    // Create LightInstructionData with the new address parameters
+    let light_ix_data = LightInstructionData {
         proof: rpc_result.proof,
-        merkle_context: *merkle_context,
-        merkle_tree_root_index: 0,
-        address_merkle_context: *address_merkle_context,
-        address_merkle_tree_root_index: rpc_result.address_root_indices[0],
+        inputs: None,
+        old_hash: None,
+        new_addresses: Some(vec![AddressMerkleContext {
+            address_merkle_tree_pubkey_index: address_merkle_tree_idx,
+            address_queue_pubkey_index: address_queue_idx,
+            root_index: rpc_result.address_root_indices[0],
+        }]),
+        nullifiers: None,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Create {
+    // Generic accounts struct
+    let accounts = {{rust-name-snake-case}}::GenericAnchorAccounts {
         signer: payer.pubkey(),
-        light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
-        account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
-        account_compression_authority,
-        registered_program_pda,
-        noop_program: PROGRAM_ID_NOOP,
-        self_program: {{rust-name-snake-case}}::ID,
-        cpi_signer,
-        system_program: solana_sdk::system_program::id(),
     };
 
-    let remaining_accounts = remaining_accounts.to_account_metas();
+    let mut all_accounts = accounts.to_account_metas(Some(true));
+    let mut remaining_account_metas = packed_accounts.to_account_metas(&account_meta_config);
+    all_accounts.append(&mut remaining_account_metas);
 
+    // Create instruction with our new interface
     let instruction = Instruction {
         program_id: {{rust-name-snake-case}}::ID,
-        accounts: [accounts.to_account_metas(Some(true)), remaining_accounts].concat(),
-        data: instruction_data.data(),
+        accounts: all_accounts,
+        data: {{rust-name-snake-case}}::instruction::Create {
+            light_ix_data,
+            output_merkle_tree_index: merkle_tree_idx,
+        }
+        .data(),
     };
 
     let event = rpc
@@ -206,22 +184,19 @@ where
 async fn increment<R>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
-    remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     compressed_account: &CompressedAccountWithMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
 ) -> Result<(), RpcError>
 where
     R: RpcConnection + MerkleTreeExt,
 {
-    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
-    let registered_program_pda = Pubkey::find_program_address(
-        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
-        &PROGRAM_ID_ACCOUNT_COMPRESSION,
-    )
-    .0;
-    let hash = compressed_account.hash().unwrap();
+    // Create packed accounts on each function call
+    let mut packed_accounts = PackedAccounts::default();
     let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
+    let merkle_tree_index = packed_accounts.add_account(merkle_tree_pubkey, true);
+    
+    let account_meta_config = SystemAccountMetaConfig::new();
+    let hash = compressed_account.hash().unwrap();
 
     let rpc_result = test_indexer
         .create_proof_for_compressed_accounts(
@@ -232,47 +207,46 @@ where
             rpc,
         )
         .await;
-
-    let merkle_context = pack_merkle_context(compressed_account.merkle_context, remaining_accounts);
-
-    let inputs = vec![
-        compressed_account
-            .compressed_account
-            .data
-            .clone()
-            .unwrap()
-            .data,
-    ];
-
-    let instruction_data = {{rust-name-snake-case}}::instruction::Increment {
-        inputs,
+    
+    // Get the counter account data and deserialize it to get the current counter value
+    let counter_data = &compressed_account.compressed_account.data.clone().unwrap().data;
+    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_data[..]).unwrap();
+    
+    // Create the CompressedAccountMeta
+    let account_meta = CompressedAccountMeta {
+        address: *compressed_account.compressed_account.address.as_ref().unwrap(),
+        merkle_tree_index: merkle_tree_index,
+        owner_index: None, // Not needed for our case
+    };
+    
+    // Create LightInstructionData for the increment operation
+    let light_ix_data = LightInstructionData {
         proof: rpc_result.proof,
-        merkle_context,
-        merkle_tree_root_index: rpc_result.root_indices[0],
-        address_merkle_context: *address_merkle_context,
-        address_merkle_tree_root_index: 0,
+        inputs: None,
+        old_hash: Some(hash),
+        new_addresses: None,
+        nullifiers: None,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Increment {
+    // Generic accounts struct
+    let accounts = {{rust-name-snake-case}}::GenericAnchorAccounts {
         signer: payer.pubkey(),
-        light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
-        account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
-        account_compression_authority,
-        registered_program_pda,
-        noop_program: PROGRAM_ID_NOOP,
-        self_program: {{rust-name-snake-case}}::ID,
-        cpi_signer,
-        system_program: solana_sdk::system_program::id(),
     };
 
-    let remaining_accounts = remaining_accounts.to_account_metas();
+    let mut all_accounts = accounts.to_account_metas(Some(true));
+    let mut remaining_account_metas = packed_accounts.to_account_metas(&account_meta_config);
+    all_accounts.append(&mut remaining_account_metas);
 
+    // Create instruction with our new interface
     let instruction = Instruction {
         program_id: {{rust-name-snake-case}}::ID,
-        accounts: [accounts.to_account_metas(Some(true)), remaining_accounts].concat(),
-        data: instruction_data.data(),
+        accounts: all_accounts,
+        data: {{rust-name-snake-case}}::instruction::Increment {
+            light_ix_data,
+            counter_value: counter_account.counter,
+            account_meta,
+        }
+        .data(),
     };
 
     let event = rpc
@@ -285,22 +259,19 @@ where
 async fn delete_account<R>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
-    remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     compressed_account: &CompressedAccountWithMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
 ) -> Result<(), RpcError>
 where
     R: RpcConnection + MerkleTreeExt,
 {
-    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
-    let registered_program_pda = Pubkey::find_program_address(
-        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
-        &PROGRAM_ID_ACCOUNT_COMPRESSION,
-    )
-    .0;
-    let hash = compressed_account.hash().unwrap();
+    // Create packed accounts on each function call
+    let mut packed_accounts = PackedAccounts::default();
     let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
+    let merkle_tree_index = packed_accounts.add_account(merkle_tree_pubkey, true);
+    
+    let account_meta_config = SystemAccountMetaConfig::new();
+    let hash = compressed_account.hash().unwrap();
 
     let rpc_result = test_indexer
         .create_proof_for_compressed_accounts(
@@ -311,47 +282,46 @@ where
             rpc,
         )
         .await;
-
-    let merkle_context = pack_merkle_context(compressed_account.merkle_context, remaining_accounts);
-
-    let inputs = vec![
-        compressed_account
-            .compressed_account
-            .data
-            .clone()
-            .unwrap()
-            .data,
-    ];
-
-    let instruction_data = {{rust-name-snake-case}}::instruction::Delete {
-        inputs,
+    
+    // Get the counter account data and deserialize it to get the current counter value
+    let counter_data = &compressed_account.compressed_account.data.clone().unwrap().data;
+    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_data[..]).unwrap();
+    
+    // Create the CompressedAccountMeta
+    let account_meta = CompressedAccountMeta {
+        address: *compressed_account.compressed_account.address.as_ref().unwrap(),
+        merkle_tree_index: merkle_tree_index,
+        owner_index: None, // Not needed for our case
+    };
+    
+    // Create LightInstructionData for the delete operation
+    let light_ix_data = LightInstructionData {
         proof: rpc_result.proof,
-        merkle_context,
-        merkle_tree_root_index: rpc_result.root_indices[0],
-        address_merkle_context: *address_merkle_context,
-        address_merkle_tree_root_index: 0,
+        inputs: None,
+        old_hash: Some(hash),
+        new_addresses: None,
+        nullifiers: None,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Delete {
+    // Generic accounts struct
+    let accounts = {{rust-name-snake-case}}::GenericAnchorAccounts {
         signer: payer.pubkey(),
-        light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
-        account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
-        account_compression_authority,
-        registered_program_pda,
-        noop_program: PROGRAM_ID_NOOP,
-        self_program: {{rust-name-snake-case}}::ID,
-        cpi_signer,
-        system_program: solana_sdk::system_program::id(),
     };
 
-    let remaining_accounts = remaining_accounts.to_account_metas();
+    let mut all_accounts = accounts.to_account_metas(Some(true));
+    let mut remaining_account_metas = packed_accounts.to_account_metas(&account_meta_config);
+    all_accounts.append(&mut remaining_account_metas);
 
+    // Create instruction with our new interface
     let instruction = Instruction {
         program_id: {{rust-name-snake-case}}::ID,
-        accounts: [accounts.to_account_metas(Some(true)), remaining_accounts].concat(),
-        data: instruction_data.data(),
+        accounts: all_accounts,
+        data: {{rust-name-snake-case}}::instruction::Delete {
+            light_ix_data,
+            counter_value: counter_account.counter,
+            account_meta,
+        }
+        .data(),
     };
 
     let transaction = Transaction::new_signed_with_payer(
