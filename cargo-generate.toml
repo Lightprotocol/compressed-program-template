@@ -35,10 +35,6 @@ prompt = "Borsh version"
 type = "string"
 prompt = "light hasher version"
 
-[placeholders.light-macros-version]
-type = "string"
-prompt = "light macros version"
-
 [placeholders.light-sdk-version]
 type = "string"
 prompt = "light sdk version"
@@ -59,9 +55,9 @@ prompt = "solana sdk version"
 type = "string"
 prompt = "light client version"
 
-[placeholders.light-test-utils-version]
+[placeholders.light-program-test-version]
 type = "string"
-prompt = "light test utils version"
+prompt = "light program test version"
 
 [placeholders.solana-program-test-version]
 type = "string"
