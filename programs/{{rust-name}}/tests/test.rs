@@ -8,22 +8,20 @@ use light_client::rpc::test_rpc::ProgramTestRpcConnection;
 use light_sdk::address::{derive_address, derive_address_seed};
 use light_sdk::compressed_account::CompressedAccountWithMerkleContext;
 use light_sdk::merkle_context::{
-    pack_address_merkle_context, pack_merkle_context, AddressMerkleContext, MerkleContext,
-    PackedAddressMerkleContext, PackedMerkleContext, RemainingAccounts,
+    pack_address_merkle_context, pack_merkle_context, AddressMerkleContext, RemainingAccounts,
 };
 use light_sdk::utils::get_cpi_authority_pda;
-use light_sdk::verify::find_cpi_signer;
 use light_sdk::{PROGRAM_ID_ACCOUNT_COMPRESSION, PROGRAM_ID_LIGHT_SYSTEM, PROGRAM_ID_NOOP};
 use light_test_utils::test_env::{setup_test_programs_with_accounts_v2, EnvAccounts};
 use light_test_utils::{RpcConnection, RpcError};
-use {{rust-name-snake-case}}::CounterCompressedAccount;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
-use solana_sdk::transaction::Transaction;
+use {{rust-name-snake-case}}::{state::CounterCompressedAccount, CPI_AUTHORITY_PDA_SEED};
 
 #[tokio::test]
 async fn test() {
+    // Start prover with light start-prover --run-mode rpc
     let (mut rpc, env) = setup_test_programs_with_accounts_v2(Some(vec![(
         String::from("{{rust-name-snake-case}}"),
         {{rust-name-snake-case}}::ID,
@@ -41,20 +39,86 @@ async fn test() {
             merkle_tree: env.address_merkle_tree_pubkey,
             queue: env.address_merkle_tree_queue_pubkey,
         }],
-        true,
-        true,
+        false,
+        false,
     )
     .await;
 
+    let address = create_account(&mut rpc, &mut test_indexer, &env, &payer)
+        .await
+        .unwrap();
+
+    // Check that it was created correctly.
+    let compressed_accounts =
+        test_indexer.get_compressed_accounts_by_owner(&{{rust-name-snake-case}}::ID);
+    assert_eq!(compressed_accounts.len(), 1);
+    let compressed_account = &compressed_accounts[0];
+    assert_eq!(compressed_account.compressed_account.address, Some(address));
+
+    let counter_account = &compressed_account
+        .compressed_account
+        .data
+        .as_ref()
+        .unwrap()
+        .data;
+    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_account[..]).unwrap();
+    assert_eq!(counter_account.owner, payer.pubkey());
+    assert_eq!(counter_account.counter, 0);
+
+    increment(
+        &mut rpc,
+        &mut test_indexer,
+        &payer,
+        compressed_account,
+        env.merkle_tree_pubkey,
+        address,
+        counter_account.counter,
+    )
+    .await
+    .unwrap();
+
+    // Check that it was updated correctly.
+    let compressed_accounts =
+        test_indexer.get_compressed_accounts_by_owner(&{{rust-name-snake-case}}::ID);
+    assert_eq!(compressed_accounts.len(), 1);
+    let compressed_account = &compressed_accounts[0];
+    let counter_account = &compressed_account
+        .compressed_account
+        .data
+        .as_ref()
+        .unwrap()
+        .data;
+    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_account[..]).unwrap();
+    assert_eq!(counter_account.owner, payer.pubkey());
+    assert_eq!(counter_account.counter, 1);
+
+    delete_account(
+        &mut rpc,
+        &mut test_indexer,
+        &payer,
+        compressed_account,
+        address,
+        counter_account.counter,
+    )
+    .await
+    .unwrap();
+    let compressed_accounts =
+        test_indexer.get_compressed_accounts_by_owner(&{{rust-name-snake-case}}::ID);
+    assert_eq!(compressed_accounts.len(), 0);
+}
+
+async fn create_account<R>(
+    rpc: &mut R,
+    test_indexer: &mut TestIndexer<R>,
+    env: &EnvAccounts,
+    payer: &Keypair,
+) -> Result<[u8; 32], RpcError>
+where
+    R: RpcConnection + MerkleTreeExt,
+{
     let mut remaining_accounts = RemainingAccounts::default();
 
-    let merkle_context = MerkleContext {
-        merkle_tree_pubkey: env.merkle_tree_pubkey,
-        nullifier_queue_pubkey: env.nullifier_queue_pubkey,
-        leaf_index: 0,
-        queue_index: None,
-    };
-    let merkle_context = pack_merkle_context(merkle_context, &mut remaining_accounts);
+    let merkle_tree_index = remaining_accounts.insert_or_get(env.merkle_tree_pubkey);
 
     let address_merkle_context = AddressMerkleContext {
         address_merkle_tree_pubkey: env.address_merkle_tree_pubkey,
@@ -71,84 +135,6 @@ async fn test() {
     let address_merkle_context =
         pack_address_merkle_context(address_merkle_context, &mut remaining_accounts);
 
-    create_account(
-        &mut rpc,
-        &mut test_indexer,
-        &env,
-        &mut remaining_accounts,
-        &payer,
-        &address,
-        &merkle_context,
-        &address_merkle_context,
-    )
-    .await
-    .unwrap();
-
-    // Check that it was created correctly.
-    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&{{rust-name-snake-case}}::ID);
-    assert_eq!(compressed_accounts.len(), 1);
-    let compressed_account = &compressed_accounts[0];
-    let counter_account = &compressed_account
-        .compressed_account
-        .data
-        .as_ref()
-        .unwrap()
-        .data;
-    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_account[..]).unwrap();
-    assert_eq!(counter_account.owner, payer.pubkey());
-    assert_eq!(counter_account.counter, 0);
-
-    increment(
-        &mut rpc,
-        &mut test_indexer,
-        &mut remaining_accounts,
-        &payer,
-        compressed_account,
-        &address_merkle_context,
-    )
-    .await
-    .unwrap();
-
-
-    // Check that it was updated correctly.
-    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&{{rust-name-snake-case}}::ID);
-    assert_eq!(compressed_accounts.len(), 1);
-    let compressed_account = &compressed_accounts[0];
-    let counter_account = &compressed_account
-        .compressed_account
-        .data
-        .as_ref()
-        .unwrap()
-        .data;
-    let counter_account = CounterCompressedAccount::deserialize(&mut &counter_account[..]).unwrap();
-    assert_eq!(counter_account.owner, payer.pubkey());
-    assert_eq!(counter_account.counter, 1);
-
-    delete_account(
-        &mut rpc,
-        &mut test_indexer,
-        &mut remaining_accounts,
-        &payer,
-        compressed_account,
-        &address_merkle_context,
-    )
-    .await
-    .unwrap();
-}
-
-async fn create_account<R>(
-    rpc: &mut R,
-    test_indexer: &mut TestIndexer<R>,
-    env: &EnvAccounts,
-    remaining_accounts: &mut RemainingAccounts,
-    payer: &Keypair,
-    address: &[u8; 32],
-    merkle_context: &PackedMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
-) -> Result<(), RpcError>
-where
-    R: RpcConnection + MerkleTreeExt,
-{
     let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
     let registered_program_pda = Pubkey::find_program_address(
         &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
@@ -159,24 +145,25 @@ where
         .create_proof_for_compressed_accounts(
             None,
             None,
-            Some(&[*address]),
+            Some(&[address]),
             Some(vec![env.address_merkle_tree_pubkey]),
             rpc,
         )
         .await;
+    let (cpi_signer, bump) = Pubkey::find_program_address(
+        [CPI_AUTHORITY_PDA_SEED].as_slice(),
+        &{{rust-name-snake-case}}::ID,
+    );
 
     let instruction_data = {{rust-name-snake-case}}::instruction::Create {
-        inputs: Vec::new(),
         proof: rpc_result.proof,
-        merkle_context: *merkle_context,
-        merkle_tree_root_index: 0,
-        address_merkle_context: *address_merkle_context,
+        address_merkle_context,
         address_merkle_tree_root_index: rpc_result.address_root_indices[0],
+        bump,
+        merkle_tree_index,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Create {
+    let accounts = {{rust-name-snake-case}}::accounts::GenericAccounts {
         signer: payer.pubkey(),
         light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
         account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
@@ -200,26 +187,27 @@ where
         .create_and_send_transaction_with_event(&[instruction], &payer.pubkey(), &[payer], None)
         .await?;
     test_indexer.add_compressed_accounts_with_token_data(&event.unwrap().0);
-    Ok(())
+    Ok(address)
 }
 
 async fn increment<R>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
-    remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     compressed_account: &CompressedAccountWithMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
+    output_merkle_tree: Pubkey,
+    address: [u8; 32],
+    input_counter_value: u64,
 ) -> Result<(), RpcError>
 where
     R: RpcConnection + MerkleTreeExt,
 {
-    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
-    let registered_program_pda = Pubkey::find_program_address(
-        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
-        &PROGRAM_ID_ACCOUNT_COMPRESSION,
-    )
-    .0;
+    let mut remaining_accounts = RemainingAccounts::default();
+
+    let output_merkle_tree_index = remaining_accounts.insert_or_get(output_merkle_tree);
+    let merkle_context =
+        pack_merkle_context(compressed_account.merkle_context, &mut remaining_accounts);
+
     let hash = compressed_account.hash().unwrap();
     let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
 
@@ -233,29 +221,27 @@ where
         )
         .await;
 
-    let merkle_context = pack_merkle_context(compressed_account.merkle_context, remaining_accounts);
-
-    let inputs = vec![
-        compressed_account
-            .compressed_account
-            .data
-            .clone()
-            .unwrap()
-            .data,
-    ];
-
+    let (cpi_signer, bump) = Pubkey::find_program_address(
+        [CPI_AUTHORITY_PDA_SEED].as_slice(),
+        &{{rust-name-snake-case}}::ID,
+    );
     let instruction_data = {{rust-name-snake-case}}::instruction::Increment {
-        inputs,
         proof: rpc_result.proof,
-        merkle_context,
-        merkle_tree_root_index: rpc_result.root_indices[0],
-        address_merkle_context: *address_merkle_context,
-        address_merkle_tree_root_index: 0,
+        root_index: rpc_result.root_indices[0],
+        input_merkle_context: merkle_context,
+        output_merkle_tree_index,
+        address,
+        input_counter_value,
+        bump,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Increment {
+    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
+    let registered_program_pda = Pubkey::find_program_address(
+        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
+        &PROGRAM_ID_ACCOUNT_COMPRESSION,
+    )
+    .0;
+    let accounts = {{rust-name-snake-case}}::accounts::GenericAccounts {
         signer: payer.pubkey(),
         light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
         account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
@@ -285,20 +271,19 @@ where
 async fn delete_account<R>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
-    remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     compressed_account: &CompressedAccountWithMerkleContext,
-    address_merkle_context: &PackedAddressMerkleContext,
+    address: [u8; 32],
+    input_counter_value: u64,
 ) -> Result<(), RpcError>
 where
     R: RpcConnection + MerkleTreeExt,
 {
-    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
-    let registered_program_pda = Pubkey::find_program_address(
-        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
-        &PROGRAM_ID_ACCOUNT_COMPRESSION,
-    )
-    .0;
+    let mut remaining_accounts = RemainingAccounts::default();
+
+    let merkle_context =
+        pack_merkle_context(compressed_account.merkle_context, &mut remaining_accounts);
+
     let hash = compressed_account.hash().unwrap();
     let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
 
@@ -312,29 +297,26 @@ where
         )
         .await;
 
-    let merkle_context = pack_merkle_context(compressed_account.merkle_context, remaining_accounts);
-
-    let inputs = vec![
-        compressed_account
-            .compressed_account
-            .data
-            .clone()
-            .unwrap()
-            .data,
-    ];
-
+    let (cpi_signer, bump) = Pubkey::find_program_address(
+        [CPI_AUTHORITY_PDA_SEED].as_slice(),
+        &{{rust-name-snake-case}}::ID,
+    );
     let instruction_data = {{rust-name-snake-case}}::instruction::Delete {
-        inputs,
         proof: rpc_result.proof,
-        merkle_context,
-        merkle_tree_root_index: rpc_result.root_indices[0],
-        address_merkle_context: *address_merkle_context,
-        address_merkle_tree_root_index: 0,
+        root_index: rpc_result.root_indices[0],
+        input_merkle_context: merkle_context,
+        address,
+        input_counter_value,
+        bump,
     };
 
-    let cpi_signer = find_cpi_signer(&{{rust-name-snake-case}}::ID);
-
-    let accounts = {{rust-name-snake-case}}::accounts::Delete {
+    let account_compression_authority = get_cpi_authority_pda(&PROGRAM_ID_LIGHT_SYSTEM);
+    let registered_program_pda = Pubkey::find_program_address(
+        &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
+        &PROGRAM_ID_ACCOUNT_COMPRESSION,
+    )
+    .0;
+    let accounts = {{rust-name-snake-case}}::accounts::GenericAccounts {
         signer: payer.pubkey(),
         light_system_program: PROGRAM_ID_LIGHT_SYSTEM,
         account_compression_program: PROGRAM_ID_ACCOUNT_COMPRESSION,
@@ -354,12 +336,9 @@ where
         data: instruction_data.data(),
     };
 
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction],
-        Some(&payer.pubkey()),
-        &[&payer],
-        rpc.get_latest_blockhash().await.unwrap(),
-    );
-    rpc.process_transaction(transaction).await?;
+    let event = rpc
+        .create_and_send_transaction_with_event(&[instruction], &payer.pubkey(), &[payer], None)
+        .await?;
+    test_indexer.add_compressed_accounts_with_token_data(&event.unwrap().0);
     Ok(())
 }
