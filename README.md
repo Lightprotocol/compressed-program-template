@@ -5,7 +5,7 @@ This template initializes a counter program with instructions to create a compre
 ## Build
 
 ``
-$ anchor build
+$ cargo build-sbf
 ``
 
 ## Test
