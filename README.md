@@ -5,16 +5,16 @@ This template initializes a counter program with instructions to create a compre
 ## Build
 
 ``
-$ anchor build
+$ cargo build-sbf
 ``
 
 ## Test
 
 Requirements:
-- light cli 
+- light cli
 
 ``
-$ cargo test-sbf
+$ light start-prover --run-mode rpc && cargo test-sbf && kill $(lsof -t -i:3001)
 ``
 
 The test spawns a prover server in the background.
