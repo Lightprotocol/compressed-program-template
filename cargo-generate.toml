@@ -59,10 +59,6 @@ prompt = "light client version"
 type = "string"
 prompt = "light program test version"
 
-[placeholders.solana-program-test-version]
-type = "string"
-prompt = "solana program test version"
-
 [placeholders.tokio-version]
 type = "string"
 prompt = "tokio version"

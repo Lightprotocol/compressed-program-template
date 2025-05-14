@@ -1,31 +1,30 @@
 use anchor_lang::prelude::*;
 use light_sdk::{
     account::LightAccount,
-    cpi::verify::verify_compressed_account_infos,
+    cpi::{CpiAccounts, CpiInputs},
     error::LightSdkError,
     instruction::{account_meta::CompressedAccountMeta, instruction_data::LightInstructionData},
     Discriminator, LightDiscriminator, LightHasher,
+    address::v1::derive_address,
+    NewAddressParamsPacked, ValidityProof,
 };
 
 declare_id!("{{program-id}}");
 
 #[program]
 pub mod {{rust-name-snake-case}} {
-    use light_sdk::{
-        address::v1::derive_address,
-        cpi::accounts::CompressionCpiAccounts,
-        NewAddressParamsPacked,
-    };
+
 
     use super::*;
 
     pub fn create<'info>(
         ctx: Context<'_, '_, '_, 'info, GenericAnchorAccounts<'info>>,
-        light_ix_data: LightInstructionData,
+        proof: ValidityProof,
+        address_merkle_context: PackedAddressMerkleContext,
         output_merkle_tree_index: u8,
     ) -> Result<()> {
         let program_id = crate::ID.into();
-        let light_cpi_accounts = CompressionCpiAccounts::new(
+        let light_cpi_accounts = CpiAccounts::new(
             ctx.accounts.signer.as_ref(),
             ctx.remaining_accounts,
             crate::ID,
@@ -59,23 +58,20 @@ usize].key(),
 
         counter.owner = ctx.accounts.signer.key();
 
-        verify_compressed_account_infos(
-            &light_cpi_accounts,
-            light_ix_data.proof,
-            &[counter.to_account_info().unwrap()],
-            Some(vec![new_address_params]),
-            None,
-            false,
-            None,
-        )
-        .map_err(ProgramError::from)?;
+        let cpi = CpiInputs::new_with_address(
+            proof,
+            vec![counter.to_account_info().map_err(ProgramError::from)?],
+            vec![new_address_params],
+        );
+        cpi.invoke_light_system_program(light_cpi_accounts)
+            .map_err(ProgramError::from)?;
 
         Ok(())
     }
 
     pub fn increment<'info>(
         ctx: Context<'_, '_, '_, 'info, GenericAnchorAccounts<'info>>,
-        light_ix_data: LightInstructionData,
+        proof: ValidityProof,
         counter_value: u64,
         account_meta: CompressedAccountMeta,
     ) -> Result<()> {
@@ -92,30 +88,27 @@ usize].key(),
 
         counter.counter += 1;
 
-        let light_cpi_accounts = CompressionCpiAccounts::new(
+        let light_cpi_accounts = CpiAccounts::new(
             ctx.accounts.signer.as_ref(),
             ctx.remaining_accounts,
             crate::ID,
         )
         .map_err(ProgramError::from)?;
 
-        verify_compressed_account_infos(
-            &light_cpi_accounts,
-            light_ix_data.proof,
-            &[counter.to_account_info().unwrap()],
-            None,
-            None,
-            false,
-            None,
-        )
-        .map_err(ProgramError::from)?;
+        let cpi = CompressionInstruction::new(
+            proof,
+            vec![counter.to_account_info().map_err(ProgramError::from)?],
+        );
+
+        cpi.invoke_light_system_program(light_cpi_accounts)
+            .map_err(ProgramError::from)?;
 
         Ok(())
     }
 
     pub fn delete<'info>(
         ctx: Context<'_, '_, '_, 'info, GenericAnchorAccounts<'info>>,
-        light_ix_data: LightInstructionData,
+        proof: ValidityProof,
         counter_value: u64,
         account_meta: CompressedAccountMeta,
     ) -> Result<()> {
@@ -131,24 +124,20 @@ usize].key(),
         )
         .map_err(ProgramError::from)?;
 
-        let light_cpi_accounts = CompressionCpiAccounts::new(
+        let light_cpi_accounts = CpiAccounts::new(
             ctx.accounts.signer.as_ref(),
             ctx.remaining_accounts,
             crate::ID,
         )
         .map_err(ProgramError::from)?;
 
-        // The true parameter indicates that accounts should be closed
-        verify_compressed_account_infos(
-            &light_cpi_accounts,
-            light_ix_data.proof,
-            &[counter.to_account_info().unwrap()],
-            None,
-            None,
-            true,
-            None,
-        )
-        .map_err(ProgramError::from)?;
+        let cpi = CompressionInstruction::new(
+            proof,
+            vec![counter.to_account_info().map_err(ProgramError::from)?],
+        );
+
+        cpi.invoke_light_system_program(light_cpi_accounts)
+            .map_err(ProgramError::from)?;
 
         Ok(())
     }

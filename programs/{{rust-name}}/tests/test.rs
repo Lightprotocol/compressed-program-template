@@ -5,12 +5,8 @@ use light_client::{
     indexer::Indexer,
     rpc::{types::ProofRpcResult, RpcConnection},
 };
-use light_program_test::{
-    indexer::{TestIndexer, TestIndexerExtensions},
-    prover::{spawn_prover, ProverConfig, ProverMode},
-    test_env::{setup_{{rust-name-snake-case}}s_with_accounts_v2, EnvAccounts},
-    test_rpc::ProgramTestRpcConnection,
-};
+use light_program_test::{program_test::LightProgramTest, AddressWithTree, ProgramTestConfig};
+
 use light_sdk::{
     address::v1::derive_address,
     cpi::accounts::SystemAccountMetaConfig,
@@ -29,24 +25,10 @@ use {{rust-name-snake-case}}::CounterCompressedAccount;
 #[serial]
 #[tokio::test]
 async fn test() {
-    spawn_prover(
-        true,
-        ProverConfig {
-            run_mode: Some(ProverMode::Rpc),
-            circuits: vec![],
-        },
-    )
-    .await;
-
-    let (mut rpc, env) = setup_{{rust-name-snake-case}}s_with_accounts_v2(Some(vec![(
-        String::from("{{rust-name-snake-case}}"),
-        {{rust-name-snake-case}}::ID,
-    )]))
-    .await;
+    let config = ProgramTestConfig::new(true, Some(vec![("{{rust-name-snake-case}}", {{rust-name-snake-case}}::ID)]));
+    let mut rpc = LightProgramTest::new(config).await.unwrap();
     let payer = rpc.get_payer().insecure_clone();
 
-    let mut test_indexer: TestIndexer<ProgramTestRpcConnection> =
-        TestIndexer::init_from_env(&payer, &env, None).await;
     let address_merkle_context = AddressMerkleContext {
         address_merkle_tree_pubkey: env.address_merkle_tree_pubkey,
         address_queue_pubkey: env.address_merkle_tree_queue_pubkey,
@@ -59,29 +41,26 @@ async fn test() {
         &{{rust-name-snake-case}}::ID,
     );
     {
-        let rpc_result = test_indexer
-            .create_proof_for_compressed_accounts(
-                None,
-                None,
-                Some(&[address]),
-                Some(vec![env.address_merkle_tree_pubkey]),
-                &mut rpc,
+        let rpc_result = rpc
+            .get_validity_proof(
+                vec![],
+                vec![AddressWithTree {
+                    tree: address_merkle_context.address_merkle_tree_pubkey,
+                    address,
+                }],
             )
             .await
             .unwrap();
 
         let instruction = create_account_instruction(&env, payer.pubkey(), rpc_result);
-        let event = rpc
-            .create_and_send_transaction_with_public_event(
+        rpc
+            .create_and_send_transaction(
                 &[instruction],
                 &payer.pubkey(),
                 &[&payer],
-                None,
             )
             .await
             .unwrap();
-        let slot = rpc.get_slot().await.unwrap();
-        test_indexer.add_compressed_accounts_with_token_data(slot, &event.unwrap().0);
     }
     // Check that it was created correctly.
     let compressed_accounts = test_indexer
@@ -103,35 +82,23 @@ async fn test() {
 
     // Increment counter.
     {
-        let rpc_result = {
-            let hash = compressed_account.hash().unwrap();
-            let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
-
-            test_indexer
-                .create_proof_for_compressed_accounts(
-                    Some(Vec::from(&[hash])),
-                    Some(Vec::from(&[merkle_tree_pubkey])),
-                    None,
-                    None,
-                    &mut rpc,
+        let hash = compressed_account.hash().unwrap();
+        let rpc_result = rpc.get_validity_proof(
+                    Vec::from(&[hash]),
+                    vec![],
                 )
                 .await
-                .unwrap()
-        };
+                .unwrap();
         let instruction =
             create_increment_instruction(payer.pubkey(), compressed_account, rpc_result);
 
-        let event = rpc
-            .create_and_send_transaction_with_public_event(
+        rpc.create_and_send_transaction(
                 &[instruction],
                 &payer.pubkey(),
                 &[&payer],
-                None,
             )
             .await
             .unwrap();
-        let slot = rpc.get_slot().await.unwrap();
-        test_indexer.add_compressed_accounts_with_token_data(slot, &event.unwrap().0);
     }
     // Check that it was updated correctly.
     let compressed_accounts = test_indexer
@@ -152,36 +119,24 @@ async fn test() {
 
     // Delete account.
     {
-        let rpc_result = {
-            let hash = compressed_account.hash().unwrap();
-            let merkle_tree_pubkey = compressed_account.merkle_context.merkle_tree_pubkey;
-
-            test_indexer
-                .create_proof_for_compressed_accounts(
-                    Some(Vec::from(&[hash])),
-                    Some(Vec::from(&[merkle_tree_pubkey])),
-                    None,
-                    None,
-                    &mut rpc,
+        let hash = compressed_account.hash().unwrap();
+        let rpc_result = rpc.get_validity_proof(
+                    Vec::from(&[hash]),
+                    vec![],
                 )
                 .await
-                .unwrap()
-        };
+                .unwrap();
         let instruction =
             create_delete_account_instruction(payer.pubkey(), compressed_account, rpc_result);
-        let event = rpc
-            .create_and_send_transaction_with_public_event(
+        rpc.create_and_send_transaction(
                 &[instruction],
                 &payer.pubkey(),
                 &[&payer],
-                None,
             )
             .await
             .unwrap();
-        let slot = rpc.get_slot().await.unwrap();
-        test_indexer.add_compressed_accounts_with_token_data(slot, &event.unwrap().0);
 
-        let compressed_accounts = test_indexer
+        let compressed_accounts = rpc
             .get_compressed_accounts_by_owner_v2(&{{rust-name-snake-case}}::ID)
             .await
             .unwrap();
