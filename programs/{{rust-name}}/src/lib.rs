@@ -1,19 +1,18 @@
 use anchor_lang::prelude::*;
 use light_sdk::{
     account::LightAccount,
-    cpi::{CpiAccounts, CpiInputs},
-    error::LightSdkError,
-    instruction::{account_meta::CompressedAccountMeta, instruction_data::LightInstructionData},
-    Discriminator, LightDiscriminator, LightHasher,
     address::v1::derive_address,
-    NewAddressParamsPacked, ValidityProof,
+    cpi::{CpiAccounts, CpiInputs},
+    instruction::{
+        account_meta::CompressedAccountMeta, merkle_context::PackedAddressMerkleContext,
+    },
+    LightDiscriminator, LightHasher, NewAddressParamsPacked, ValidityProof,
 };
 
 declare_id!("{{program-id}}");
 
 #[program]
 pub mod {{rust-name-snake-case}} {
-
 
     use super::*;
 
@@ -31,15 +30,11 @@ pub mod {{rust-name-snake-case}} {
         )
         .map_err(ProgramError::from)?;
 
-        let address_merkle_context = light_ix_data
-            .new_addresses
-            .ok_or(LightSdkError::ExpectedAddressMerkleContext)
-            .map_err(ProgramError::from)?[0];
-
         let (address, address_seed) = derive_address(
             &[b"counter", ctx.accounts.signer.key().as_ref()],
-            &light_cpi_accounts.tree_accounts()[address_merkle_context.address_merkle_tree_pubkey_index as
-usize].key(),
+            &light_cpi_accounts.tree_accounts()
+                [address_merkle_context.address_merkle_tree_pubkey_index as usize]
+                .key(),
             &crate::ID,
         );
 
@@ -47,7 +42,8 @@ usize].key(),
             seed: address_seed,
             address_queue_account_index: address_merkle_context.address_queue_pubkey_index,
             address_merkle_tree_root_index: address_merkle_context.root_index,
-            address_merkle_tree_account_index: address_merkle_context.address_merkle_tree_pubkey_index,
+            address_merkle_tree_account_index: address_merkle_context
+                .address_merkle_tree_pubkey_index,
         };
 
         let mut counter = LightAccount::<'_, CounterCompressedAccount>::new_init(
@@ -95,7 +91,7 @@ usize].key(),
         )
         .map_err(ProgramError::from)?;
 
-        let cpi = CompressionInstruction::new(
+        let cpi = CpiInputs::new(
             proof,
             vec![counter.to_account_info().map_err(ProgramError::from)?],
         );
@@ -131,7 +127,7 @@ usize].key(),
         )
         .map_err(ProgramError::from)?;
 
-        let cpi = CompressionInstruction::new(
+        let cpi = CpiInputs::new(
             proof,
             vec![counter.to_account_info().map_err(ProgramError::from)?],
         );

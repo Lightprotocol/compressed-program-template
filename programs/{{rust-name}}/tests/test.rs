@@ -2,17 +2,16 @@
 
 use anchor_lang::{AnchorDeserialize, InstructionData, ToAccountMetas};
 use light_client::{
-    indexer::Indexer,
-    rpc::{types::ProofRpcResult, RpcConnection},
+    indexer::{Indexer, ProofRpcResult},
+    rpc::RpcConnection,
 };
 use light_program_test::{program_test::LightProgramTest, AddressWithTree, ProgramTestConfig};
 
 use light_sdk::{
     address::v1::derive_address,
-    cpi::accounts::SystemAccountMetaConfig,
     instruction::{
         account_meta::CompressedAccountMeta,
-        instruction_data::LightInstructionData,
+        accounts::SystemAccountMetaConfig,
         merkle_context::{pack_address_merkle_context, pack_merkle_context, AddressMerkleContext},
         pack_accounts::PackedAccounts,
     },
@@ -30,8 +29,8 @@ async fn test() {
     let payer = rpc.get_payer().insecure_clone();
 
     let address_merkle_context = AddressMerkleContext {
-        address_merkle_tree_pubkey: env.address_merkle_tree_pubkey,
-        address_queue_pubkey: env.address_merkle_tree_queue_pubkey,
+        address_merkle_tree_pubkey: rpc.test_accounts.v1_address_trees[0].merkle_tree,
+        address_queue_pubkey: rpc.test_accounts.v1_address_trees[0].queue,
     };
 
     // Calculate address using the derive_address function
@@ -52,18 +51,18 @@ async fn test() {
             .await
             .unwrap();
 
-        let instruction = create_account_instruction(&env, payer.pubkey(), rpc_result);
-        rpc
-            .create_and_send_transaction(
-                &[instruction],
-                &payer.pubkey(),
-                &[&payer],
-            )
+        let instruction = create_account_instruction(
+            payer.pubkey(),
+            rpc_result,
+            address_merkle_context,
+            rpc.test_accounts.v1_state_trees[0].merkle_tree,
+        );
+        rpc.create_and_send_transaction(&[instruction], &payer.pubkey(), &[&payer])
             .await
             .unwrap();
     }
     // Check that it was created correctly.
-    let compressed_accounts = test_indexer
+    let compressed_accounts = rpc
         .get_compressed_accounts_by_owner_v2(&{{rust-name-snake-case}}::ID)
         .await
         .unwrap();
@@ -83,25 +82,19 @@ async fn test() {
     // Increment counter.
     {
         let hash = compressed_account.hash().unwrap();
-        let rpc_result = rpc.get_validity_proof(
-                    Vec::from(&[hash]),
-                    vec![],
-                )
-                .await
-                .unwrap();
+        let rpc_result = rpc
+            .get_validity_proof(Vec::from(&[hash]), vec![])
+            .await
+            .unwrap();
         let instruction =
             create_increment_instruction(payer.pubkey(), compressed_account, rpc_result);
 
-        rpc.create_and_send_transaction(
-                &[instruction],
-                &payer.pubkey(),
-                &[&payer],
-            )
+        rpc.create_and_send_transaction(&[instruction], &payer.pubkey(), &[&payer])
             .await
             .unwrap();
     }
     // Check that it was updated correctly.
-    let compressed_accounts = test_indexer
+    let compressed_accounts = rpc
         .get_compressed_accounts_by_owner_v2(&{{rust-name-snake-case}}::ID)
         .await
         .unwrap();
@@ -120,19 +113,13 @@ async fn test() {
     // Delete account.
     {
         let hash = compressed_account.hash().unwrap();
-        let rpc_result = rpc.get_validity_proof(
-                    Vec::from(&[hash]),
-                    vec![],
-                )
-                .await
-                .unwrap();
+        let rpc_result = rpc
+            .get_validity_proof(Vec::from(&[hash]), vec![])
+            .await
+            .unwrap();
         let instruction =
             create_delete_account_instruction(payer.pubkey(), compressed_account, rpc_result);
-        rpc.create_and_send_transaction(
-                &[instruction],
-                &payer.pubkey(),
-                &[&payer],
-            )
+        rpc.create_and_send_transaction(&[instruction], &payer.pubkey(), &[&payer])
             .await
             .unwrap();
 
@@ -145,32 +132,25 @@ async fn test() {
 }
 
 fn create_account_instruction(
-    env: &EnvAccounts,
     payer: Pubkey,
     rpc_result: ProofRpcResult,
+    address_merkle_context: AddressMerkleContext,
+    output_merkle_tree: Pubkey,
 ) -> Instruction {
     let mut remaining_accounts = PackedAccounts::default();
     let config = SystemAccountMetaConfig::new({{rust-name-snake-case}}::ID);
     remaining_accounts.add_system_accounts(config);
-    let address_merkle_context = AddressMerkleContext {
-        address_merkle_tree_pubkey: env.address_merkle_tree_pubkey,
-        address_queue_pubkey: env.address_merkle_tree_queue_pubkey,
-    };
 
-    let output_merkle_tree_index = remaining_accounts.insert_or_get(env.merkle_tree_pubkey);
+    let output_merkle_tree_index = remaining_accounts.insert_or_get(output_merkle_tree);
     let packed_address_merkle_context = pack_address_merkle_context(
         &address_merkle_context,
         &mut remaining_accounts,
         rpc_result.address_root_indices[0],
     );
 
-    let light_ix_data = LightInstructionData {
-        proof: Some(rpc_result.proof),
-        new_addresses: Some(vec![packed_address_merkle_context]),
-    };
-
     let instruction_data = {{rust-name-snake-case}}::instruction::Create {
-        light_ix_data,
+        proof: rpc_result.proof.into(),
+        address_merkle_context: packed_address_merkle_context,
         output_merkle_tree_index,
     };
 
@@ -212,20 +192,15 @@ fn create_increment_instruction(
     )
     .unwrap();
 
-    let light_ix_data = LightInstructionData {
-        proof: Some(rpc_result.proof),
-        new_addresses: None,
-    };
-
     let account_meta = CompressedAccountMeta {
         merkle_context: packed_merkle_context,
         address: compressed_account.compressed_account.address.unwrap(),
-        root_index: Some(rpc_result.root_indices[0].unwrap()),
+        root_index: Some(rpc_result.root_indices[0]),
         output_merkle_tree_index: packed_merkle_context.merkle_tree_pubkey_index,
     };
 
     let instruction_data = {{rust-name-snake-case}}::instruction::Increment {
-        light_ix_data,
+        proof: rpc_result.proof.into(),
         counter_value: counter_account.counter,
         account_meta,
     };
@@ -268,20 +243,15 @@ fn create_delete_account_instruction(
     )
     .unwrap();
 
-    let light_ix_data = LightInstructionData {
-        proof: Some(rpc_result.proof),
-        new_addresses: None,
-    };
-
     let account_meta = CompressedAccountMeta {
         merkle_context: packed_merkle_context,
         address: compressed_account.compressed_account.address.unwrap(),
-        root_index: Some(rpc_result.root_indices[0].unwrap()),
+        root_index: Some(rpc_result.root_indices[0]),
         output_merkle_tree_index: packed_merkle_context.merkle_tree_pubkey_index,
     };
 
     let instruction_data = {{rust-name-snake-case}}::instruction::Delete {
-        light_ix_data,
+        proof: rpc_result.proof.into(),
         counter_value: counter_account.counter,
         account_meta,
     };
