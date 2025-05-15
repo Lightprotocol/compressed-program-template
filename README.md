@@ -15,9 +15,8 @@ Requirements:
 - solana cli version 2.1.16
 - anchor version 0.31.1
 
-1. `$ light test-validator`
-2. `$ anchor deploy`
-3. `$ npm test`
+1. `$ light test-validator --sbf-program {{program-id}} ./target/deploy/{{rust-name-snake-case}}.so`
+2. `$ npm test`
 
 `$ light test-validator` spawns the following background processes:
 1. solana test validator `http://127.0.0.1:8899`
