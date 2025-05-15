@@ -3,7 +3,6 @@ name = "{{rust-name}}"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
-rust-version = "1.75.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]
@@ -20,16 +19,7 @@ idl-build = ["anchor-lang/idl-build", "light-sdk/idl-build"]
 
 [dependencies]
 anchor-lang = "{{anchor-version}}"
-light-hasher = { version = "{{light-hasher-version}}", features = ["solana"] }
 light-sdk = { version = "{{light-sdk-version}}", features = [
     "anchor",
     "idl-build",
 ] }
-
-
-[dev-dependencies]
-light-client = "{{light-client-version}}"
-light-program-test = "{{light-program-test-version}}"
-tokio = "{{tokio-version}}"
-solana-sdk = "{{solana-sdk-version}}"
-serial_test = "3.2.0"
