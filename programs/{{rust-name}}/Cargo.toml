@@ -19,8 +19,5 @@ idl-build = ["anchor-lang/idl-build", "light-sdk/idl-build"]
 
 [dependencies]
 anchor-lang = "{{anchor-version}}"
-light-sdk = { version = "{{light-sdk-version}}", features = [
-    "anchor",
-    "idl-build",
-] }
+light-sdk = { version = "{{light-sdk-version}}", features = ["anchor"] }
 light-hasher = { version = "{{light-hasher-version}}", features = ["solana"] }

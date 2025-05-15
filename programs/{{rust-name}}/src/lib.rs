@@ -139,8 +139,10 @@ pub mod {{rust-name-snake-case}} {
     }
 }
 
+// Declare compressed account as event so that it is included in the anchor idl.
+#[event]
 #[derive(
-    Clone, Debug, Default, AnchorDeserialize, AnchorSerialize, LightDiscriminator, LightHasher,
+    Clone, Debug, Default, LightDiscriminator, LightHasher,
 )]
 pub struct CounterCompressedAccount {
     #[hash]

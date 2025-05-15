@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, web3 } from "@coral-xyz/anchor";
-import { {{rust-name-camel-case}} } from "../target/types/{{rust-name}}";
-import idl from "../target/idl/{{rust-name}}.json";
+import { {{rust-name-camel-case}} } from "../target/types/{{rust-name-snake-case}}";
+import idl from "../target/idl/{{rust-name-snake-case}}.json";
 import {
   bn,
   CompressedAccountWithMerkleContext,
@@ -9,6 +9,7 @@ import {
   defaultStaticAccountsStruct,
   defaultTestStateTreeAccounts,
   deriveAddress,
+  deriveAddressSeed,
   LightSystemProgram,
   Rpc,
   sleep,
