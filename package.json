@@ -6,8 +6,8 @@
     "test": "ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "0.31.1",
-    "@lightprotocol/stateless.js": "^0.21.0",
+    "@coral-xyz/anchor": "{{anchor-js-version}}",
+    "@lightprotocol/stateless.js": "{{stateless-js-version}}",
     "dotenv": "^16.5.0"
   },
   "devDependencies": {

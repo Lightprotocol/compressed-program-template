@@ -27,38 +27,14 @@ default = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
 type = "string"
 prompt = "Anchor version"
 
-[placeholders.borsh-version]
-type = "string"
-prompt = "Borsh version"
-
 [placeholders.light-hasher-version]
 type = "string"
 prompt = "light hasher version"
 
-[placeholders.light-sdk-version]
+[placeholders.stateless-js-version]
 type = "string"
-prompt = "light sdk version"
+prompt = "stateless js version"
 
-[placeholders.light-compressed-account-version]
+[placeholders.anchor-js-version]
 type = "string"
-prompt = "light compressed account version"
-
-[placeholders.light-verifier-version]
-type = "string"
-prompt = "light verifier version"
-
-[placeholders.solana-sdk-version]
-type = "string"
-prompt = "solana sdk version"
-
-[placeholders.light-client-version]
-type = "string"
-prompt = "light client version"
-
-[placeholders.light-program-test-version]
-type = "string"
-prompt = "light program test version"
-
-[placeholders.tokio-version]
-type = "string"
-prompt = "tokio version"
+prompt = "anchor js version"
