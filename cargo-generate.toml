@@ -1,6 +1,9 @@
 [template]
 cargo_generate_version = ">=0.18.2"
-ignore = [ "circuits/program_name/cargo-generate.toml", "programs_psp/program_name/cargo-generate.toml" ]
+ignore = [
+    "circuits/program_name/cargo-generate.toml",
+    "programs_psp/program_name/cargo-generate.toml",
+]
 
 
 [placeholders.rust-name]
@@ -32,21 +35,13 @@ prompt = "Borsh version"
 type = "string"
 prompt = "light hasher version"
 
-[placeholders.light-macros-version]
-type = "string"
-prompt = "light macros version"
-
 [placeholders.light-sdk-version]
 type = "string"
 prompt = "light sdk version"
 
-[placeholders.light-sdk-macros-version]
+[placeholders.light-compressed-account-version]
 type = "string"
-prompt = "light sdk macros version"
-
-[placeholders.light-utils-version]
-type = "string"
-prompt = "Light utils version"
+prompt = "light compressed account version"
 
 [placeholders.light-verifier-version]
 type = "string"
@@ -60,13 +55,9 @@ prompt = "solana sdk version"
 type = "string"
 prompt = "light client version"
 
-[placeholders.light-test-utils-version]
+[placeholders.light-program-test-version]
 type = "string"
-prompt = "light test utils version"
-
-[placeholders.solana-program-test-version]
-type = "string"
-prompt = "solana program test version"
+prompt = "light program test version"
 
 [placeholders.tokio-version]
 type = "string"
