@@ -15,6 +15,12 @@ Requirements:
 - solana cli version 2.1.16
 - anchor version 0.31.1
 
+### Rust
+- `cargo test-sbf`
+
+### Typescript
+
+0. `$ npm install`
 1. `$ light test-validator --sbf-program {{program-id}} ./target/deploy/{{rust-name-snake-case}}.so`
 2. `$ npm test`
 

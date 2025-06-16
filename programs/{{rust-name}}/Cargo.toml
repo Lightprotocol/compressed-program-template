@@ -21,3 +21,19 @@ idl-build = ["anchor-lang/idl-build", "light-sdk/idl-build"]
 anchor-lang = "{{anchor-version}}"
 light-sdk = { version = "{{light-sdk-version}}", features = ["anchor"] }
 light-hasher = { version = "{{light-hasher-version}}", features = ["solana"] }
+light-sdk-types = { version = "{{light-sdk-version}}" }
+
+[target.'cfg(not(target_os = "solana"))'.dependencies]
+solana-sdk = "{{solana-sdk-version}}"
+
+[dev-dependencies]
+light-client = { version = "{{light-sdk-version}}" }
+light-program-test = { version = "{{light-sdk-version}}" }
+tokio = "{{tokio-version}}"
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("frozen-abi", "no-entrypoint"))',
+]

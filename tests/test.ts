@@ -203,13 +203,13 @@ async function incrementCounterCompressedAccount(
       remainingAccounts.insertOrGet(outputMerkleTree);
 
     const compressedAccountMeta = {
-      merkleContext: {
+      treeInfo: {
         merkleTreePubkeyIndex,
         queuePubkeyIndex,
         leafIndex: counterAccount.leafIndex,
         proveByIndex: false,
+        rootIndex: proofRpcResult.rootIndices[0],
       },
-      rootIndex: proofRpcResult.rootIndices[0],
       outputMerkleTreeIndex,
       address: counterAccount.address,
     };
@@ -271,13 +271,13 @@ async function deleteCounterCompressedAccount(
       remainingAccounts.insertOrGet(outputMerkleTree);
 
     const compressedAccountMeta = {
-      merkleContext: {
+      treeInfo: {
         merkleTreePubkeyIndex,
         queuePubkeyIndex,
         leafIndex: counterAccount.leafIndex,
         proveByIndex: false,
+        rootIndex: proofRpcResult.rootIndices[0],
       },
-      rootIndex: proofRpcResult.rootIndices[0],
       outputMerkleTreeIndex,
       address: counterAccount.address,
     };
