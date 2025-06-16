@@ -11,17 +11,27 @@ $ anchor build
 ## Test
 
 Requirements:
-- light cli 
+- light cli version {{light-cli-version}}
+- solana cli version {{solana-cli-version}}
+- anchor version {{anchor-version}}
 
-``
-$ cargo test-sbf
-``
+### Rust
+- `cargo test-sbf`
 
-The test spawns a prover server in the background.
-In case of a connection refused error on port 3001 try to kill the prover server with `lsof -i:3001` and `kill <pid>`.
+### Typescript
+
+0. `$ npm install`
+1. `$ light test-validator --sbf-program {{program-id}} ./target/deploy/{{rust-name-snake-case}}.so`
+2. `$ npm test`
+
+`$ light test-validator` spawns the following background processes:
+1. solana test validator `http://127.0.0.1:8899`
+2. prover server `http://127.0.0.1:8784`
+3. photon indexer `http://127.0.0.1:3001`
+
+You can kill these background processes with `lsof -i:<port>` and `kill <pid>`.
 
 
 ## Disclaimer
 
-Programs are audited and deployed on Solana devnet and mainnet.
-The light rust macros are experimental and api will change.
+Light Protocol programs are audited and deployed on Solana devnet and mainnet.
