@@ -11,9 +11,9 @@ $ anchor build
 ## Test
 
 Requirements:
-- light cli version 0.24.0
-- solana cli version 2.1.16
-- anchor version 0.31.1
+- light cli version {{light-cli-version}}
+- solana cli version {{solana-cli-version}}
+- anchor version {{anchor-version}}
 
 ### Rust
 - `cargo test-sbf`
